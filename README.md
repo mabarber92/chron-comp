@@ -32,6 +32,7 @@ chron_comp:
  - object that stores pairs of years with the full text
  - load pair of texts as pair of dates
  - function to add pairwise text reuse data, populate year-wise offsets
+ - need to handle cases where multiple sections in text might have same year label
  - load/save year-wise data as json
 - year-wise text comparison class:
  - func to create year fragments (split according to heuristic)
