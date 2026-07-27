@@ -1,4 +1,4 @@
-from config import TEMP_DIR, OVERWRITE
+from chron_comp.config import TEMP_DIR, OVERWRITE
 from openiti_utils.openitiTexts import openitiTextMs
 import json
 import pandas as pd
@@ -26,23 +26,22 @@ class pairwiseChronData():
         else:
             self.data_dir = TEMP_DIR
 
-        # Else check temps and process if needed
+
+        # Create the temp paths
+        self.chron_json = "chron_data.json"
+        self.book_json = "book_data.json"
+        self.undated_json = "undated_data.json"
+
+        # Check if data has been populated already - and if we're allowed to overwrite it
+        process_data = self.check_temp(b1_path, b2_path)
+
+        # If we find we need to run the processes run them
+        if process_data:
+            self.create_chron_data(b1_path, b2_path, passim_tsv)
+        
+        # Else load the data from the temp
         else:
-            # Create the temp paths
-            self.chron_json = "chron_data.json"
-            self.book_json = "book_data.json"
-            self.undated_json = "undated_data.json"
-
-            # Check if data has been populated already - and if we're allowed to overwrite it
-            process_data = self.check_temp(b1_path, b2_path)
-
-            # If we find we need to run the processes run them
-            if process_data:
-                self.create_chron_data(b1_path, b2_path, passim_tsv)
-            
-            # Else load the data from the temp
-            else:
-                self.load_from_temp()
+            self.load_from_temp()
     
     
     # Main processing funcs
@@ -376,7 +375,8 @@ class pairwiseChronData():
             books = list(data.keys())
             books = [self.fetch_book_id(book) for book in books]
             for book in books:
-                year_dict[book] = year_dict.get(book, []).append(year)
+                existing_data = year_dict.get(book, [])
+                year_dict[book] = existing_data.append(year)
         
         return year_dict
     
@@ -429,6 +429,8 @@ class pairwiseChronData():
     # Possibly add funcs for retrieving multiple dates - but probably should leave that to requesting func
 
     # Utility funcs for handling data
+    def fetch_bids(self):
+        return self.books[0], self.books[1]
 
     def _create_bids(self, b1_path, b2_path):
         """Logic for creating an ID from a book that can be used to create temp data and check temp data"""
