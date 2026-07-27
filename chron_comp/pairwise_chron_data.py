@@ -4,6 +4,8 @@ import json
 import pandas as pd
 import re
 from tqdm import tqdm
+from openiti.helper.funcs import text_cleaner
+from openiti.helper.ara import tokenize
 
 import os
 
@@ -15,6 +17,9 @@ class pairwiseChronData():
                             if None, check temp for json to be used as data
         chron_data: a directory that contains the same json files as a temp folder and can be loaded instead"""
         
+        # Init values
+        self.passim_key = "passim_offsets"
+
         # If a path to a chron_json is given - initialise object directly from that
         if chron_data is not None:
             self.data_dir = chron_data
@@ -103,8 +108,8 @@ class pairwiseChronData():
 
         for offset in tqdm(offsets):
             data = {"offset": offset["offset"], "offset_end": offset["offset_end"], "heading": offset["heading"], "content": offset["content"], "dates": offset["dates"]}
-            if "passim_offsets" in offset.keys():
-                data["passim_offsets"] = offset["passim_offsets"]
+            if self.passim_key in offset.keys():
+                data[self.passim_key] = offset[self.passim_key]
 
             # Sections with no resolvable @YY date go to undated_data - kept separate so
             # year-wise comparisons never have to special-case a fake "year 0" bucket
@@ -182,7 +187,7 @@ class pairwiseChronData():
         for row in tqdm(data_dicts):
             filtered_df = self._fetch_overlapping_offsets(passim_df, f"start_offset{data_dir}", f"end_offset{data_dir}", row["offset"], row["offset_end"])
             passim_data = filtered_df[select_cols].rename(columns=full_rename).to_dict("records")
-            row["passim_offsets"] = passim_data
+            row[self.passim_key] = passim_data
             new_data_dict.append(row)
         
         return new_data_dict
@@ -349,6 +354,79 @@ class pairwiseChronData():
                 overwrite = True
         return overwrite
     
+    # Functions for querying the data object (in modular design, avoid querying the data dict directly in separate functions, prefer functions based here)
+    
+    def fetch_book_id(self, book_instance):
+        """Convert a book_instance string into a book_id for use accross reference functions"""
+        return ".".join(book_instance.split(".")[:-1])
+    
+    def fetch_year(self, year):
+        """return all data for a given year
+        year: int for requested date
+        returns: list of all data in object - following same structure as in input data"""
+        return self.chron_data[year]
+    
+    def fetch_book_years(self):
+        """Return a dict recording unique years for each book_id
+        returns: dict of key value pair where key is the book_id and value a list of unique dates
+                {"book_id": []}
+        """
+        year_dict = {}
+        for year, data in self.chron_data.items():
+            books = list(data.keys())
+            books = [self.fetch_book_id(book) for book in books]
+            for book in books:
+                year_dict[book] = year_dict.get(book, []).append(year)
+        
+        return year_dict
+    
+    def fetch_year_list(self, book_id = None):
+        """Return unique list of years present in the object
+        book_id: if None return all years, otherwise only years present in the book_id
+        returns: list of ints (years)"""
+        if book_id is not None:
+            book_years = self.fetch_book_years
+            years = book_years[book_id]
+        else:
+            years = list(self.chron_data.keys())
+        return years
+                
+
+    
+    def fetch_year_text(self, year, clean=False, return_tokens=False):
+        """return a list of book instances and their corresponding strings for a year
+        year: int  for requested date
+        clean: clean the text using an OpenITI cleaner
+        tokenize: return a list of tokens as a result for text, rather than a string
+        returns: list of dict records (convertable to a df with pandas)
+                [{"book", "", "instance": int, "text": "" or []}]"""
+        year_data = self.fetch_year(year)
+        out = []
+        for book_instance, data in year_data.items():
+            # Book name is the book_instance key without the final part
+            book = self.fetch_book_id(book_instance)
+            instance = data["instance"]
+            text = data["content"]
+
+            # Handle cleaning and tokenization
+            if clean:
+                text = text_cleaner(text)
+            if return_tokens:
+                text = tokenize(text)
+
+            out.append({"book": book, "instance": instance, "text": text})
+        
+        return out
+
+
+    def fetch_year_passim(self, year):
+        """return all passim data for a year or a list of years as a list of dicts
+        year: int for requested date
+        returns: list of passim data"""
+        data = self.fetch_year(year)
+        return data[self.passim_key]
+    
+    # Possibly add funcs for retrieving multiple dates - but probably should leave that to requesting func
 
     # Utility funcs for handling data
 
