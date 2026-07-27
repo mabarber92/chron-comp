@@ -10,13 +10,16 @@ import os
 class pairwiseChronData():
     """Class for populating year-wise alignments between two texts as a data object
     further fields can be added to the class through update, based on processing of years"""
-    def __init__(self, b1_path=None, b2_path=None, chron_json=None, passim_tsv=None):
+    def __init__(self, b1_path=None, b2_path=None, chron_data=None, passim_tsv=None):
         """b1_path, b2_path - paths to openITI mARkdown files to be used for populating data
-                            if None, check temp for json to be used as data"""
+                            if None, check temp for json to be used as data
+        chron_data: a directory that contains the same json files as a temp folder and can be loaded instead"""
         
         # If a path to a chron_json is given - initialise object directly from that
-        if chron_json is not None:
-            self.load_json_data(chron_json)
+        if chron_data is not None:
+            self.data_dir = chron_data
+        else:
+            self.data_dir = TEMP_DIR
 
         # Else check temps and process if needed
         else:
@@ -326,7 +329,7 @@ class pairwiseChronData():
 
     def check_temp(self, b1_path, b2_path):
         overwrite = OVERWRITE
-        temp_files = os.listdir(TEMP_DIR)
+        temp_files = os.listdir(self.data_dir)
         # If there are no temp files - return True - we need to run the init process
         # Note: create_chron_data always writes undated_json (even if empty), so a missing
         # file here means an incomplete/stale run rather than "no undated sections found"
@@ -357,7 +360,7 @@ class pairwiseChronData():
 
     def _build_json_path(self, file_name):
         """Build the path for the temp data"""
-        return os.path.join(TEMP_DIR, file_name)
+        return os.path.join(self.data_dir, file_name)
 
     def load_books_data(self):
         """Load the temp file containing the books data"""
@@ -365,13 +368,15 @@ class pairwiseChronData():
     
     def write_books_data(self, b1_path, b2_path):
         b1, b2 = self._create_bids(b1_path, b2_path)
-        data = {"books": [b1, b2]}
+        self.books = [b1, b2]
+        data = {"books": self.books}
         self.write_json_data(self._build_json_path(self.book_json), data)
 
     def load_from_temp(self):
         """Load data from temp directory"""
         self.load_json_data(self._build_json_path(self.chron_json))
         self.load_undated_data(self._build_json_path(self.undated_json))
+        self.books = self.load_books_data()["books"]
 
     def write_to_temp(self):
         """Write data to temp directory"""
