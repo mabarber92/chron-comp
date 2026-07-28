@@ -506,30 +506,34 @@ class pairwiseChronData():
         returns: gap_offsets - list of dictionaries (of format that can be converted to records df)
                 ["start_offset": int, "end_offset": int] where offsets are full text offsets
         """
+        # Set start and end fields - eventually switch with class internal variables
+        start_field = "local_start_offset" 
+        end_field="local_end_offset"
+        
         # Fetch the section data
         year_data = self.fetch_year(year)
         section_start, section_end = self.get_year_section_offsets(year_data, book_instance)
 
         # Fetch the passim data sort them by start
-        passim_data = self.fetch_year_passim(year, book_instance)
+        passim_data = self._fetch_field_for_instance(year_data, book_instance, self.passim_key)
         passim_data = pd.DataFrame(passim_data).sort_values(by=["start_offset"]).to_dict("records")
 
         # Write the offsets for the gaps
         gap_offsets = []
         # Check if first entry is after the start
-        first_offset = passim_data[0]["start_offset"]
+        first_offset = passim_data[0][start_field]
         if first_offset > section_start:
             gap_end = first_offset - section_start
             gap_offsets = self._append_offset_record(gap_offsets, section_start, gap_end)
         
         # Loop through offsets, except final one
         for idx, row in enumerate(passim_data[:-1]):
-            gap_start = row["end_offset"]
-            gap_end = passim_data[idx+1]["start_offset"]
+            gap_start = row[end_field]
+            gap_end = passim_data[idx+1][start_field]
             gap_offsets = self_append_offset_record(gap_offsets, gap_start, gap_end)
         
         # Check if final entry goes beyond end of section
-        final_offset = passim_data[-1]["end_offset"]
+        final_offset = passim_data[-1][end_field]
         if not final_offset > section_end:
             gap_offsets = self._append_offset_record(gap_offsets, final_offset, section_end)
         
@@ -543,6 +547,9 @@ class pairwiseChronData():
     # Funcs for handling data formatted according to object data model - takes data formatted according to object as input and returns reformatted
     def _fetch_field_for_instance(self, year_data, book_instance, data_field):
         """Utility function for fetching given data fields for a book instance - and doing safety checks"""
+        if data_field is None:
+            print(f"This data field is not present for given year_data {book_instance}")
+            exit()
         if not book_instance in year_data.keys():
             print(f"Invalid book instance for given year_data {book_instance}")
             exit()
