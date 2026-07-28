@@ -118,10 +118,59 @@ class pairwiseChronStats():
             }
             diff_data.append(out_dict)
         
-        self.len_diff_data = diff_data
+        # Only write internal variable if the whole text has been run - as this is for the full text
+        if len(years) == 0:
+            self.len_diff_data = {}
+            self.len_diff_data["count_tokens"] = count_tokens
+            self.len_diff_data["clean"] = clean
+            self.len_diff_data["data"] = diff_data
+        
         return diff_data
         
-    # def id_similar_year_lens(self, )
+    def _check_run_len_diff_data(self, clean, count_tokens):
+        """Check if we have len_diff_data according to set parameters - this is only for a full pairwise text
+        clean: True/False - checks if len_diff data matches set parameter
+        count_tokens: True/False - checks if len_diff data matches set parameter
+        if any of the parameters are not shared with existing data - re-run with the new parameters
+        returns: diff_data"""
+        diff_data = self.len_diff_data
+        if diff_data is None:
+            diff_data = self.compare_year_length(clean, count_tokens)
+        elif diff_data["clean"] != clean or diff_data["count_tokens"] != count_tokens:
+            diff_data = self.compare_year_length(clean, count_tokens)
+        else:
+            diff_data = diff_data["data"]
+        
+        return diff_data
+        
+
+    def id_similar_year_lens(self, diff_threshold=20, clean=True, count_tokens=True, return_diff_years=False):
+        """Identify years with similar lens (according to a threshold boundary) in the dataset
+        diff_threshold - acceptable level of difference in length for a pair to be considered the same
+        clean - clean texts using OpenITI cleaner before counting
+        count_tokens - use OpenITI tokens as the metric for counting
+        return_diff_years - if True, rather than returning years that meet the threshold for similar lengths, return the years that do not
+        returns: list of years"""
+        
+        # First - check if diff data is already there and rerun if needed
+        diff_data = self._check_run_len_diff_data(clean, count_tokens)
+
+        diff_df = pd.DataFrame(diff_data)
+        lower_bound = 0 - diff_threshold
+
+        # Drop cases where the len of a section on either side is 0 - so we're not working with cases where a section does not exist on one side
+        diff_df = diff_df[diff_df["b1_len"] > 0]
+        diff_df = diff_df[diff_df["b2_len"] > 0]
+
+        # If not return_diff_years - get similar data
+        if not return_diff_years:
+            criteria_year_data = diff_df[diff_df["len_diff"].between(lower_bound, diff_threshold)]
+        else:
+            criteria_year_data = diff_df[~diff_df["len_diff"].between(lower_bound, diff_threshold)]
+        
+        return criteria_year_data["year"].tolist()
+            
+
 
     # Passim comparison tools
 

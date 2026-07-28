@@ -438,16 +438,132 @@ class pairwiseChronData():
         
         return out
 
-
-    def fetch_year_passim(self, year, book):
-        """return all passim data for a year or a list of years as a list of dicts
+    def fetch_year_passim(self, year, book_instance):
+        """return all passim data for a year and book instance as a dict
         year: int for requested date
-        returns: list of passim data"""
-        data = self.fetch_year(year)
-        return data[self.passim_key]
+        returns: list of passim data - if no data found for year and book instance, returns empty list"""
+        all_data = self.fetch_year(year)
+        data = []
+        if book_instance in all_data.keys and self.passim_key is not None:
+            data = all_data[book_instance][self.passim_key]
+        return data
     
+    # Passim offset handlers - use raw full text offsets to fetch text of a passim alignment or text in a gap between alignments
+    def fetch_full_offset_text(self, year, book_instance, start, end, as_tokens=False):
+        """Use a pair of full offsets to identify text within the section and return text
+        Returned text will always be cleaned
+        year: year in which the section to be offsetted belongs
+        book_instance: the book_instance of the section
+        start: start of the offset into the full text
+        end: end of the offset into the full text
+        as_tokens : boolean  - return offset text as list of tokens (e.g. for running token counts)
+        returns: text of offset (str), before_chars (int number of chars in offset before section, default 0), after_chars (int number of char in offset after section, default 0)"""
+
+        # Set defaults for before_chars after_chars
+        before_chars = 0
+        after_chars = 0
+
+        # Get the relevant text and offsets and clean the text
+        year_data = self.fetch_year(year)
+        section_start, section_end = self.get_year_section_offsets(year_data, book_instance)
+        section_text = self._fetch_field_for_instance(year_data, book_instance, "content")
+        section_text = text_cleaner(section_text)
+
+        # Adjust offsets based on section start and end
+        local_start = start - section_start
+        # Check local_start isn't before section end - if it is set outside chars to that variable
+        if local_start < 0:
+            before_chars = -1*local_start
+            local_start = 0
+        # Check if the end offset is greater than the section end - if it is set the after_chars and local_end is end of text
+        if end > section_end:
+            local_end = -1
+            after_chars = end - section_end
+        # If not calculate the offset on the basis of difference
+        else:        
+            offset_len = end - start
+            local_end = local_start + offset_len
+
+        # Make the cut
+        cut_text = section_text[local_start:local_end]
+
+        if as_tokens:
+            cut_text = tokenize(cut_text)[0]
+        
+        return cut_text, before_chars, after_chars
+    
+    def _append_offset_record(self, offset_list, start_offset, end_offset):
+        """Helper to create a dict record for start and end offsets and update the offset list
+        returns: offset_list with new record added"""
+        offset_record =  {"start_offset": start_offset,
+                "end_offset": end_offset}
+        offset_list.append(offset_record)
+        return offset_list
+
+    def create_mirror_passim_offsets(self, year, book_instance):
+        """For all the passim offsets for a year, book_instance, create offsets for the gaps
+        between the passim alignments (including gaps between the section start and section end)
+        returns: gap_offsets - list of dictionaries (of format that can be converted to records df)
+                ["start_offset": int, "end_offset": int] where offsets are full text offsets
+        """
+        # Fetch the section data
+        year_data = self.fetch_year(year)
+        section_start, section_end = self.get_year_section_offsets(year_data, book_instance)
+
+        # Fetch the passim data sort them by start
+        passim_data = self.fetch_year_passim(year, book_instance)
+        passim_data = pd.DataFrame(passim_data).sort_values(by=["start_offset"]).to_dict("records")
+
+        # Write the offsets for the gaps
+        gap_offsets = []
+        # Check if first entry is after the start
+        first_offset = passim_data[0]["start_offset"]
+        if first_offset > section_start:
+            gap_end = first_offset - section_start
+            gap_offsets = self._append_offset_record(gap_offsets, section_start, gap_end)
+        
+        # Loop through offsets, except final one
+        for idx, row in enumerate(passim_data[:-1]):
+            gap_start = row["end_offset"]
+            gap_end = passim_data[idx+1]["start_offset"]
+            gap_offsets = self_append_offset_record(gap_offsets, gap_start, gap_end)
+        
+        # Check if final entry goes beyond end of section
+        final_offset = passim_data[-1]["end_offset"]
+        if not final_offset > section_end:
+            gap_offsets = self._append_offset_record(gap_offsets, final_offset, section_end)
+        
+        return gap_offsets
+
+
+
+
     # Possibly add funcs for retrieving multiple dates - but probably should leave that to requesting func
 
+    # Funcs for handling data formatted according to object data model - takes data formatted according to object as input and returns reformatted
+    def _fetch_field_for_instance(self, year_data, book_instance, data_field):
+        """Utility function for fetching given data fields for a book instance - and doing safety checks"""
+        if not book_instance in year_data.keys():
+            print(f"Invalid book instance for given year_data {book_instance}")
+            exit()
+        return year_data[book_instance][field]
+
+    def get_year_section_offsets(self, year_data, book_instance):
+        """For year_data, get a specific book_instance and return its offsets
+        returns: offset_start, offset_end, error if invalid book_instance"""
+        offset_start = self._fetch_field_for_instance(year_data, book_instance, "offset")
+        offset_end = self._fetch_field_for_instance(year_data, book_instance, "end_offset")
+        
+        return offset_start, offset_end
+    
+    def get_year_section_dates(self, year_data, book_instance):
+        """For year_data, get specific book_instance and return the dates it contains
+        returns: list of dates as ints"""
+        return self._fetch_field_for_instance(year_data, book_instance, "dates")
+    
+
+
+    
     # Utility funcs for handling data
     def fetch_bids(self):
         return self.books[0], self.books[1]
