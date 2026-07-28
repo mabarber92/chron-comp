@@ -375,8 +375,7 @@ class pairwiseChronData():
             books = list(data.keys())
             books = [self.fetch_book_id(book) for book in books]
             for book in books:
-                existing_data = year_dict.get(book, [])
-                year_dict[book] = existing_data.append(year)
+                year_dict.setdefault(book, []).append(year)
         
         return year_dict
     
@@ -412,7 +411,7 @@ class pairwiseChronData():
             if clean:
                 text = text_cleaner(text)
             if return_tokens:
-                text = tokenize(text)
+                text = tokenize(text)[0]
 
             out.append({"book": book, "instance": instance, "text": text})
         

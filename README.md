@@ -47,6 +47,7 @@ chron_comp:
  - nice-to-have - compare order of narrative units within year (text reuse, cosine sim fragments possibly a way into this)
  - store new document representations and cosine similarities within pairwise data class
  - export data for specific years or whole text pairs related to analysis
+ - bag-of-words comparison (n-gram diffs for each n-gram on each side)
 - pairwise stats class:
  - inherits pairwise data class (and uses that structure)
  - compare year lengths (words and chars)
@@ -54,5 +55,6 @@ chron_comp:
  - compare text reuse data year-wise (how much of a year is shared between the two texts, how large are gaps between reuse on each side)
  - compare other semantic similarities year-wise
  - export stats as reports
+
 - graphing class(es):
  - graph results of comparisons - typically with text a or b on the x axis (possibly with dates as labels)

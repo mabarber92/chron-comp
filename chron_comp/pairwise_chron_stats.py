@@ -47,8 +47,7 @@ class pairwiseChronStats():
                 else:
                     for year in years:
                         if year not in years2:
-                            existing_data = year_data.get(book, [])
-                            year_data[book] = year_data.append(year)
+                            year_data.setdefault(book, []).append(year)
         
         return year_data
 
@@ -65,6 +64,9 @@ class pairwiseChronStats():
             if row["book"] == book_name:
                 total_len += len(row["text"])
                 instance_list.append(row["instance"])
+        
+        if len(instance_list) == 0:
+            instance_list = [0]
             
         return total_len, max(instance_list)
 
@@ -80,16 +82,23 @@ class pairwiseChronStats():
                 [{"year": int, "b1": "", "b2": "", "b1_len": int, "b2_len": int, "b1_sect": int, "b2_sect": int, "len_diff": int}]"""
         
         years = self.chron_data.fetch_year_list()
-        years = years.sort()
+        years.sort()
 
         diff_data = []
 
         for year in years:
-            text_data = self.chron_data.fetch_year_text(clean=clean, return_tokens=count_tokens)
-            b1_len, b1_sect = self._select_and_measure(text_data, self.b1)
-            b2_len, b2_sect = self._select_and_measure(text_data, self.b2)
+            text_data = self.chron_data.fetch_year_text(year, clean=clean, return_tokens=count_tokens)
+            if len(text_data) > 0:
+                b1_len, b1_sect = self._select_and_measure(text_data, self.b1)
+                b2_len, b2_sect = self._select_and_measure(text_data, self.b2)
+                diff = b2_len - b1_len
+            else:
+                b1_len = 0
+                b2_len = 0
+                b1_sect = 0
+                b1_sect = 0
+                diff = 0
 
-            diff = b2_len - b1_len
             out_dict = {
                 "year": year,
                 "b1": self.b1,
