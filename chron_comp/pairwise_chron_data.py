@@ -449,7 +449,7 @@ class pairwiseChronData():
         return data
     
     # Passim offset handlers - use raw full text offsets to fetch text of a passim alignment or text in a gap between alignments
-    def fetch_full_offset_text(self, year, book_instance, start, end, as_tokens=False):
+    def fetch_full_offset_text(self, year, book_instance, start, end, as_tokens=False, year_data=None):
         """Use a pair of full offsets to identify text within the section and return text
         Returned text will always be cleaned
         year: year in which the section to be offsetted belongs
@@ -457,6 +457,7 @@ class pairwiseChronData():
         start: start of the offset into the full text
         end: end of the offset into the full text
         as_tokens : boolean  - return offset text as list of tokens (e.g. for running token counts)
+        year_data: existing year data to pass to the function - to avoid looking up again
         returns: text of offset (str), before_chars (int number of chars in offset before section, default 0), after_chars (int number of char in offset after section, default 0)"""
 
         # Set defaults for before_chars after_chars
@@ -464,7 +465,8 @@ class pairwiseChronData():
         after_chars = 0
 
         # Get the relevant text and offsets and clean the text
-        year_data = self.fetch_year(year)
+        if year_data is None:
+            year_data = self.fetch_year(year)
         section_start, section_end = self.get_year_section_offsets(year_data, book_instance)
         section_text = self._fetch_field_for_instance(year_data, book_instance, "content")
         section_text = text_cleaner(section_text)
@@ -538,6 +540,45 @@ class pairwiseChronData():
             gap_offsets = self._append_offset_record(gap_offsets, final_offset, section_end)
         
         return gap_offsets
+    
+    def fetch_text_for_offsets(self, year, book_instance, offsets_list=None, start_field="local_start_offset", end_field="local_end_offset", as_tokens=False, add_fields=[]):
+        """Helper function to loop through a list of offset dictionaries, and fetch corresponding text
+        year: year section of data to offset
+        book_instance: the book_instance to which the offsets relate
+        offsets_list: existing set of offsets to fetch text for
+        start_field: field of dictionary containing start offset
+        end_field: field of dictionary containing end offset
+        as_tokens: boolean - return list of tokens rather than string
+        add_fields: fields within the offsets to pass through into the final output
+        returns: text_data - list of dicts in record form
+                [{"text": str or list of tokens, ... fields specified in add fields}]"""
+        year_data = self.fetch_year(year)
+        if not offsets_list:
+            offsets_list = self._fetch_field_for_instance(year_data, book_instance, self.passim_key)
+        
+        text_data = []
+        for offset in offsets_list:
+            text = self.fetch_full_offset_text(year, book_instance, offset[start_field], offset[end_field]
+                                         as_tokens=as_tokens, year_data=year_data)
+            data_row = {"text": text}
+            for field in add_fields:
+                if field in offset.keys():
+                    data_row[field] = offset[field]
+                else:
+                    print(f"{field} field not found in given offset data")
+                    exit()
+            text_data.append(data_row)
+        
+        return text_data 
+            
+
+
+    def fetch_mirror_offset_text(self, year, book_instance, as_tokens=False):
+        """Function that creates mirror offsets, loops through offset data and returns text"""
+        mirror_offsets = self.create_mirror_passim_offsets(year, book_instance)
+        text_data = self.fetch_text_for_offsets(year, book_instance, offsets_list=mirror_offsets,
+                                                start_field="start_offset", end_field="end_offset", as_tokens=as_tokens)
+        return text_data
 
 
 
@@ -547,11 +588,11 @@ class pairwiseChronData():
     # Funcs for handling data formatted according to object data model - takes data formatted according to object as input and returns reformatted
     def _fetch_field_for_instance(self, year_data, book_instance, data_field):
         """Utility function for fetching given data fields for a book instance - and doing safety checks"""
-        if data_field is None:
-            print(f"This data field is not present for given year_data {book_instance}")
-            exit()
         if not book_instance in year_data.keys():
             print(f"Invalid book instance for given year_data {book_instance}")
+            exit()
+        if data_field is None or data_field not in year_data["book_instance"].keys():
+            print(f"This data field is not present for given year_data {book_instance}")
             exit()
         return year_data[book_instance][field]
 
