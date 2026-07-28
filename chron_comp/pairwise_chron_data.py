@@ -18,7 +18,10 @@ class pairwiseChronData():
         chron_data: a directory that contains the same json files as a temp folder and can be loaded instead"""
         
         # Init values
-        self.passim_key = "passim_offsets"
+        if passim_tsv is not None:
+            self.passim_key = "passim_offsets"
+        else:
+            self.passim_key = None
 
         # If a path to a chron_json is given - initialise object directly from that
         if chron_data is not None:
@@ -359,12 +362,29 @@ class pairwiseChronData():
         """Convert a book_instance string into a book_id for use accross reference functions"""
         return ".".join(book_instance.split(".")[:-1])
     
-    def fetch_year(self, year):
+    def fetch_year(self, year, book=None):
         """return all data for a given year
         year: int for requested date
-        returns: list of all data in object - following same structure as in input data"""
-        return self.chron_data[year]
+        returns: dict containing all data in object - following same structure as in input data
+                if year data does not exist - returns empty dict"""
+        if year not in self.chron_data.keys():
+            year_data = {}
+        else:
+            year_data = self.chron_data[year]
+            if book is not None:
+                filtered_year_data = {}
+                for book_instance, book_data in year_data.items():
+                    if book in book_instance:
+                        filtered_year_data[book_instance] = book_data
+
+                year_data = filtered_year_data
+        
+        return year_data
     
+    # def _fetch_books(self, year_dict, book):
+    #     """Helper func that takes a dict containing data for one year with book_instances
+    #     as keys returns a list of books"""
+
     def fetch_book_years(self):
         """Return a dict recording unique years for each book_id
         returns: dict of key value pair where key is the book_id and value a list of unique dates
@@ -398,7 +418,8 @@ class pairwiseChronData():
         clean: clean the text using an OpenITI cleaner
         tokenize: return a list of tokens as a result for text, rather than a string
         returns: list of dict records (convertable to a df with pandas)
-                [{"book", "", "instance": int, "text": "" or []}]"""
+                [{"book", "", "instance": int, "text": "" or []}]
+                if year does not exist - returns empty list"""
         year_data = self.fetch_year(year)
         out = []
         for book_instance, data in year_data.items():
@@ -418,7 +439,7 @@ class pairwiseChronData():
         return out
 
 
-    def fetch_year_passim(self, year):
+    def fetch_year_passim(self, year, book):
         """return all passim data for a year or a list of years as a list of dicts
         year: int for requested date
         returns: list of passim data"""

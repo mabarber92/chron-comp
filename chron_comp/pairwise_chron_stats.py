@@ -10,6 +10,7 @@ class pairwiseChronStats():
         
         # Init base values used for comparison
         self.init_b1_b2(chron_sort=chron_sort)
+        self.len_diff_data = None
         if passim_tsv is not None:
             self.passim_dataset = True
         else:
@@ -28,6 +29,9 @@ class pairwiseChronStats():
         self.b1_id = self._create_vers_id(self.b1)
         self.b2_id = self._create_vers_id(self.b2)
 
+    def report_pipeline(self, out_dir, pipeline_stages = ["len_comp", "passim_comp", "tfidf_sim", "semantic_sim"]):
+        """Run a full reporting pipeline - if data for specified pipeline stages not in the data object - then it will
+        not run the pipeline stage"""
 
     def _create_vers_id(self, book_id):
         """split out the third part of a book_id - as the passim id (assumes a standard URI)"""
@@ -70,18 +74,21 @@ class pairwiseChronStats():
             
         return total_len, max(instance_list)
 
+    # Length-related comparison tools
 
-    def compare_year_length(self, clean=True, count_tokens=True):
+    def compare_year_length(self, clean=True, count_tokens=True, years=[]):
         """compare the lengths of the sections of the chronicles yearwise. If multiple sections belong to 
         the same year concatenate the lengths. b1_sect and b2_sect in output record count of sections where the year is found
         clean: apply openiti text cleaner prior to measuring
         count_tokens: split the text into tokens, using openiti func, if false count chars
+        years: specify the years for comparison - returns a list relating to on those years
         char/token diff calculated as b2 - b1 (assuming b1 is the earlier text)
         stores result as an internal object self.len_comp - to avoid recalculation if used for later analysis
         returns: list of dict records (convertable to a df for export)
                 [{"year": int, "b1": "", "b2": "", "b1_len": int, "b2_len": int, "b1_sect": int, "b2_sect": int, "len_diff": int}]"""
         
-        years = self.chron_data.fetch_year_list()
+        if len(years) == 0:
+            years = self.chron_data.fetch_year_list()
         years.sort()
 
         diff_data = []
@@ -96,7 +103,7 @@ class pairwiseChronStats():
                 b1_len = 0
                 b2_len = 0
                 b1_sect = 0
-                b1_sect = 0
+                b2_sect = 0
                 diff = 0
 
             out_dict = {
@@ -111,9 +118,14 @@ class pairwiseChronStats():
             }
             diff_data.append(out_dict)
         
+        self.len_diff_data = diff_data
         return diff_data
+        
+    # def id_similar_year_lens(self, )
 
+    # Passim comparison tools
 
+    # How much is each year aligned - split according to alignment with same year or not
 
 
 

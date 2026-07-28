@@ -54,6 +54,7 @@ chron_comp:
  - compare year coverage (first year, last year, missing years for each side of the relationship, and shared data)
  - compare text reuse data year-wise (how much of a year is shared between the two texts, how large are gaps between reuse on each side)
  - compare other semantic similarities year-wise
+ - locate years with similar lengths (these are candidates for closer examination of semantic similarity, passim, etc.)
  - export stats as reports
 
 - graphing class(es):
