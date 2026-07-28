@@ -17,11 +17,8 @@ class pairwiseChronData():
                             if None, check temp for json to be used as data
         chron_data: a directory that contains the same json files as a temp folder and can be loaded instead"""
         
-        # Init values
-        if passim_tsv is not None:
-            self.passim_key = "passim_offsets"
-        else:
-            self.passim_key = None
+
+        self.passim_key = "passim_offsets"
 
         # If a path to a chron_json is given - initialise object directly from that
         if chron_data is not None:
@@ -399,6 +396,21 @@ class pairwiseChronData():
         
         return year_dict
     
+    def fetch_year_book_instances(self, book_id=None):
+        """Return a list of dicts mapping a years to lists of book instances
+        filtering for book_id if needed
+        returns mapping dict {year_int: [list of book_instances]}"""
+        instance_dict = {}
+        for year, data in self.chron_data.items():
+            instances = list(data.keys())
+            matching_instances = []
+            for instance in instances:
+                if book_id in instance:
+                    matching_instances.append(instance)
+            instance_dict[year] = matching_instances
+        
+        return instance_dict
+
     def fetch_year_list(self, book_id = None):
         """Return unique list of years present in the object
         book_id: if None return all years, otherwise only years present in the book_id
@@ -491,6 +503,7 @@ class pairwiseChronData():
 
         if as_tokens:
             cut_text = tokenize(cut_text)[0]
+            
         
         return cut_text, before_chars, after_chars
     
@@ -518,27 +531,32 @@ class pairwiseChronData():
 
         # Fetch the passim data sort them by start
         passim_data = self._fetch_field_for_instance(year_data, book_instance, self.passim_key)
-        passim_data = pd.DataFrame(passim_data).sort_values(by=["start_offset"]).to_dict("records")
-
-        # Write the offsets for the gaps
+        # If there is passim data process the gaps
         gap_offsets = []
-        # Check if first entry is after the start
-        first_offset = passim_data[0][start_field]
-        if first_offset > section_start:
-            gap_end = first_offset - section_start
-            gap_offsets = self._append_offset_record(gap_offsets, section_start, gap_end)
-        
-        # Loop through offsets, except final one
-        for idx, row in enumerate(passim_data[:-1]):
-            gap_start = row[end_field]
-            gap_end = passim_data[idx+1][start_field]
-            gap_offsets = self_append_offset_record(gap_offsets, gap_start, gap_end)
-        
-        # Check if final entry goes beyond end of section
-        final_offset = passim_data[-1][end_field]
-        if not final_offset > section_end:
-            gap_offsets = self._append_offset_record(gap_offsets, final_offset, section_end)
-        
+        if len(passim_data) > 0:
+            passim_data = pd.DataFrame(passim_data).sort_values(by=[start_field]).to_dict("records")
+
+            # Write the offsets for the gaps
+            
+            # Check if first entry is after the start
+            first_offset = passim_data[0][start_field]
+            if first_offset > section_start:
+                gap_end = first_offset - section_start
+                gap_offsets = self._append_offset_record(gap_offsets, section_start, gap_end)
+            
+            # Loop through offsets, except final one
+            for idx, row in enumerate(passim_data[:-1]):
+                gap_start = row[end_field]
+                gap_end = passim_data[idx+1][start_field]
+                gap_offsets = self._append_offset_record(gap_offsets, gap_start, gap_end)
+            
+            # Check if final entry goes beyond end of section
+            final_offset = passim_data[-1][end_field]
+            if not final_offset > section_end:
+                gap_offsets = self._append_offset_record(gap_offsets, final_offset, section_end)
+        # Else we give the whole section offset to the gap
+        else:
+            gap_offsets = self._append_offset_record(gap_offsets, section_start, section_end)
         return gap_offsets
     
     def fetch_text_for_offsets(self, year, book_instance, offsets_list=None, start_field="local_start_offset", end_field="local_end_offset", as_tokens=False, add_fields=[]):
@@ -558,7 +576,7 @@ class pairwiseChronData():
         
         text_data = []
         for offset in offsets_list:
-            text = self.fetch_full_offset_text(year, book_instance, offset[start_field], offset[end_field]
+            text, before_chars, after_chars = self.fetch_full_offset_text(year, book_instance, offset[start_field], offset[end_field],
                                          as_tokens=as_tokens, year_data=year_data)
             data_row = {"text": text}
             for field in add_fields:
@@ -581,8 +599,6 @@ class pairwiseChronData():
         return text_data
 
 
-
-
     # Possibly add funcs for retrieving multiple dates - but probably should leave that to requesting func
 
     # Funcs for handling data formatted according to object data model - takes data formatted according to object as input and returns reformatted
@@ -591,16 +607,16 @@ class pairwiseChronData():
         if not book_instance in year_data.keys():
             print(f"Invalid book instance for given year_data {book_instance}")
             exit()
-        if data_field is None or data_field not in year_data["book_instance"].keys():
-            print(f"This data field is not present for given year_data {book_instance}")
+        if data_field is None or data_field not in year_data[book_instance].keys():
+            print(f"This data field {data_field} is not present for given year_data {book_instance}")
             exit()
-        return year_data[book_instance][field]
+        return year_data[book_instance][data_field]
 
     def get_year_section_offsets(self, year_data, book_instance):
         """For year_data, get a specific book_instance and return its offsets
         returns: offset_start, offset_end, error if invalid book_instance"""
         offset_start = self._fetch_field_for_instance(year_data, book_instance, "offset")
-        offset_end = self._fetch_field_for_instance(year_data, book_instance, "end_offset")
+        offset_end = self._fetch_field_for_instance(year_data, book_instance, "offset_end")
         
         return offset_start, offset_end
     

@@ -173,6 +173,80 @@ class pairwiseChronStats():
 
 
     # Passim comparison tools
+    def _sort_measure_passim_text(self, target_year, passim_text_data):
+        """Take passim text data and aggregate it based on whether is matches year or not
+        NOTE: Later add ability to change aggregation approach where multiple dates in match and one matches
+            present implementation takes one match as a pass case
+            return: shared_agg - total shared text with same year, diff_agg - total text shared with diff year, diff_dates - dates that contribute to the diff count"""
+        shared_agg = 0
+        diff_agg = 0
+        diff_dates = []
+        for row in passim_text_data:
+            text_len = len(row["text"])
+            dates = row["dates"]
+            if target_year in dates:
+                shared_agg += text_len
+            else:
+                diff_agg += text_len
+                diff_dates.extend(dates)
+        diff_dates = list(set(diff_dates))
+
+        return shared_agg, diff_agg, diff_dates
+
+
+
+
+    def measure_passim_alignment(self, book_id, count_tokens=True):
+        """measure year-wise passim alignment with book_id using its local passim offsets
+        book_id: book_id used for creating the book_instance refs
+        count_tokens: boolean - if True measure the alignment lengths and gaps using tokens
+        Note: if multiple instances for the same book_id (i.e. multiple sections with same year) this function aggregates them
+        returns: list of dict records (convertable to df)
+                [{"year": int, "aligned_with_same_year": int, "aligned_with_diff_year": int, "unaligned_total": int, "alternate_years": list of int}]"""
+        
+        year_instances = self.chron_data.fetch_year_book_instances(book_id)
+
+
+        # For each year - prepare a row of data and append
+        aggregated_data = []
+        for year, instances in year_instances.items():
+            agg_same_year = 0
+            agg_diff_year = 0
+            agg_unaligned = 0
+            alternate_years = []
+            for instance in instances:
+                passim_text_data = self.chron_data.fetch_text_for_offsets(year, instance, as_tokens=count_tokens, add_fields=["dates"])
+                passim_gap_data = self.chron_data.fetch_mirror_offset_text(year, instance, as_tokens=count_tokens)
+                
+                
+                # Process passim data
+                shared_agg, diff_agg, diff_dates = self._sort_measure_passim_text(year, passim_text_data)
+                agg_same_year += shared_agg
+                agg_diff_year += diff_agg
+                alternate_years.extend(diff_dates)
+
+                # agg_unaligned
+                for row in passim_gap_data:
+                    gap_len = len(row["text"])
+                    agg_unaligned += gap_len
+
+            # write results to row
+            results_row = {"year": year, 
+                        "aligned_with_same_year": agg_same_year, 
+                        "aligned_with_diff_year": agg_diff_year, 
+                        "unaligned_total": agg_unaligned, 
+                        "alternate_years": alternate_years}
+            
+            aggregated_data.append(results_row)
+        
+        return aggregated_data
+
+
+    def measure_passim_alignment_b1(self, count_tokens=True):
+        return self.measure_passim_alignment(self.b1, count_tokens=count_tokens)
+    
+    def measure_passim_alignment_b2(self, count_tokens=True):
+        return self.measure_passim_alignment(self.b2, count_tokens=count_tokens)
 
     # How much is each year aligned - split according to alignment with same year or not
 
