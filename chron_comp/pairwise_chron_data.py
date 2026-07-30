@@ -688,3 +688,4 @@ class pairwiseChronData():
             data = json.load(f)
         return data
     
+    # Add test function that imports passim data with text and exports sample of cut alignments and original alignment text
