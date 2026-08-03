@@ -35,6 +35,8 @@ class openitiTextMs():
             self.ms_dict = None
 
         self.section_map = None
+        self._ms_raw_starts = None
+        self._ms_whole_clean_offset = None
 
         if report:
             self.report_stats()
@@ -386,13 +388,13 @@ class openitiTextMs():
         end_marker: text to use to mark the offset for the end of the text - if None, then do not add to output
         return_content: if True return the full content of the text, uncleaned
         returns
-        list of dicts, one dict for each heading: [{"heading": "heading text", 
-                                                    "level": level_in_heirarchy, 
-                                                    "bio": True/False, 
+        list of dicts, one dict for each heading: [{"heading": "heading text",
+                                                    "level": level_in_heirarchy,
+                                                    "bio": True/False,
                                                     "offset": char_pos}]"""
-        
+
         # To allow for cleaned text, we'll need to split on header, clean, fetch offset and augment
-        
+
         # Construct regexes
         regex = self._build_section_regexes(levels_count, include_bios)
         splitter = rf"({regex})"
@@ -406,28 +408,34 @@ class openitiTextMs():
         # Loop through section splits - if text matches section then process offset
         for idx, section_split in tqdm(enumerate(section_splits)):
             if re.match(regex, section_split):
-                
+
                 # Process the milestone and offset
                 level_count = section_split.count("|")
                 if level_count == 0:
                     bio = True
                 else:
                     bio= False
-                
-                prior_text = "".join(section_splits[:idx])
-                content = section_splits[idx+1]
-                
-                # Clean text if set
-                if clean:
-                    prior_text = text_cleaner(prior_text)
-                    content = text_cleaner(content)
+
+                prior_text_raw = "".join(section_splits[:idx])
+                content_raw = section_splits[idx+1]
 
                 if token_offset:
-                    offset = self.count_tokens(prior_text)
-                    offset_end = offset + self.count_tokens(content)
+                    prior_for_tok = text_cleaner(prior_text_raw) if clean else prior_text_raw
+                    content_for_tok = text_cleaner(content_raw) if clean else content_raw
+                    offset = self.count_tokens(prior_for_tok)
+                    offset_end = offset + self.count_tokens(content_for_tok)
+                elif clean:
+                    # offset/offset_end must both be lengths of text_cleaner applied to a genuine
+                    # prefix of the raw document (starting at position 0) rather than to content_raw
+                    # cleaned in isolation - text_cleaner is not compositional across an arbitrary
+                    # cut point (cleaning a substring alone can introduce its own boundary
+                    # whitespace), but is well-behaved across prefixes of the same raw string. This
+                    # is the same coordinate space build_full_ms_offsets/ms_offset_base anchors to.
+                    offset = len(text_cleaner(prior_text_raw))
+                    offset_end = len(text_cleaner(prior_text_raw + section_split + content_raw))
                 else:
-                    offset = len(prior_text)
-                    offset_end = offset + len(content)
+                    offset = len(prior_text_raw)
+                    offset_end = offset + len(content_raw)
                 data = {
                     "heading": section_split,
                     "level": level_count,
@@ -436,18 +444,17 @@ class openitiTextMs():
                     "offset_end" : offset_end
                 }
                 if return_content:
-                    content_text = section_splits[idx+1]
-                    data["content"] = content_text
+                    data["content"] = content_raw
 
                 offset_data.append(data)
-        
+
         if end_marker is not None:
             if token_offset:
                 text_len = self.count_tokens(self.mARkdown_text)
             else:
                 if clean:
                     text = text_cleaner(self.mARkdown_text)
-                text_len = len(text)            
+                text_len = len(text)
             data = {
                 "heading": end_marker,
                 "level": 1,
@@ -456,7 +463,7 @@ class openitiTextMs():
             }
 
             offset_data.append(data)
-        
+
         return offset_data
     
     def section_offset_df(self, levels_count=None, include_bios=True, clean=True, csv_path=None, meta_cols=None, token_offset=False, end_marker=None):
@@ -503,6 +510,43 @@ class openitiTextMs():
         
         return regex
 
+    def _ensure_ms_raw_starts(self):
+        """Precompute the raw (uncleaned) character offset, within self.mARkdown_text, of the
+        start of each milestone's own text (i.e. the position right after the previous milestone's
+        marker, or the start of the document for milestone 1)."""
+        if self._ms_raw_starts is not None:
+            return
+        if self.ms_dict is None:
+            self.init_process_milestones()
+        pattern = rf"({self.ms_pattern})"
+        splits = re.split(pattern, self.mARkdown_text)
+        starts = {}
+        pos = 0
+        for idx, split in enumerate(splits):
+            if not self.is_ms_marker(split) and idx + 1 < len(splits) and self.is_ms_marker(splits[idx + 1]):
+                ms_no = self.fetch_ms_number(splits[idx + 1])
+                starts[ms_no] = pos
+            pos += len(split)
+        self._ms_raw_starts = starts
+
+    def ms_offset_base(self, ms_no):
+        """Full-text offset, in the single whole-document text_cleaner coordinate space, of the
+        start of the given milestone's own content. This is the space passim's own per-milestone
+        offsets (start_offset/end_offset, i.e. b1/e1 or b2/e2) are meant to be added onto: passim's
+        offsets are 0-indexed from the first real character of the milestone (as cleaned in the
+        context of the whole document), not from an isolated per-milestone cleaning (which
+        introduces its own extra leading/trailing whitespace not present in passim's reference).
+        Cached per milestone so repeated lookups (e.g. once per passim row) don't re-clean the
+        document from scratch each time; still O(ms_count) text_cleaner calls the first time any
+        lookup happens, each on the raw-text prefix up to that milestone."""
+        self._ensure_ms_raw_starts()
+        if getattr(self, "_ms_whole_clean_offset", None) is None:
+            self._ms_whole_clean_offset = {}
+        if ms_no not in self._ms_whole_clean_offset:
+            raw_start = self._ms_raw_starts[ms_no]
+            self._ms_whole_clean_offset[ms_no] = len(text_cleaner(self.mARkdown_text[:raw_start]))
+        return self._ms_whole_clean_offset[ms_no]
+
     def build_full_ms_offsets(self, ms_offsets, clean=True, token_offset=False):
         """Use a list of ms_offsets to create a list of dictionaries of raw
         offsets
@@ -531,9 +575,9 @@ class openitiTextMs():
                 end_offset = prev_tokens + self.char_to_tok_offset_clean(ms, ms_offset["end_offset"])
 
             else:
-                prev_ms = self.fetch_milestones(list(range(1, ms_offset["ms"])), clean=clean, join=True)
-                start_offset = len(prev_ms) + ms_offset["start_offset"]
-                end_offset = start_offset + ms_offset["end_offset"]
+                base = self.ms_offset_base(ms_offset["ms"])
+                start_offset = base + ms_offset["start_offset"]
+                end_offset = base + ms_offset["end_offset"]
 
             
             offset_dict = {

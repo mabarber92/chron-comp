@@ -7,7 +7,7 @@ if __name__ == "__main__":
     # text_2 = "data/texts/0845Maqrizi.ItticazHunafa.Shamela0000176-ara1.mARkdown.dates_tagged"
     # passim_tsv = "data/passim_data/Shamela0000176-ara1.mARkdown_Kraken210528115855-ara1.mARkdown.csv"
     # date_obj = pairwiseChronData(text_1, text_2, passim_tsv=passim_tsv)
-    
+    # date_obj.verify_passim_offsets("offset_text_to_verify.csv")
     date_pairs = pairwiseChronStats()
 
     print(date_pairs.measure_passim_alignment_b2())

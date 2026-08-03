@@ -127,14 +127,17 @@ class pairwiseChronData():
         return new_cols
 
     def _fetch_overlapping_offsets(self, df, start_col, end_col, start, end):
-        """Find rows of df whose [start_col, end_col] range overlaps the given [start, end] range.
+        """Find rows of df whose [start_col, end_col) range overlaps the given [start, end) range.
         True interval overlap (not a one-sided point-in-range check) so it's correct regardless
         of which range - the row's or the given one - happens to be the larger/containing one.
+        Ranges are half-open (end is exclusive, matching Python slice semantics - the character at
+        position `end` belongs to the next range, not this one), so strict inequalities are used:
+        two ranges that only touch at a shared boundary (e.g. [0, 10) and [10, 20)) do not overlap.
         df: incoming data with start_col/end_col to check for overlap
         start_col, end_col: column names holding each row's own range
         start, end: the range to check for overlap against
-        returns: df filtered to rows whose range overlaps [start, end]"""
-        mask = (df[start_col] <= end) & (df[end_col] >= start)
+        returns: df filtered to rows whose range overlaps [start, end)"""
+        mask = (df[start_col] < end) & (df[end_col] > start)
         return df[mask]
 
     def _map_date_to_offset(self, offset_df, dated_sections, data_dir):
@@ -481,23 +484,33 @@ class pairwiseChronData():
         if year_data is None:
             year_data = self.fetch_year(year)
         section_start, section_end = self.get_year_section_offsets(year_data, book_instance)
-        section_text = self._fetch_field_for_instance(year_data, book_instance, "content")
-        section_text = text_cleaner(section_text)
+        heading_text = self._fetch_field_for_instance(year_data, book_instance, "heading")
+        content_text = self._fetch_field_for_instance(year_data, book_instance, "content")
+        # heading and content are contiguous in the raw text, but text_cleaner is not compositional
+        # across an arbitrary cut point - cleaning content alone (without its own heading) produces
+        # text that doesn't line up with section_start/section_end (which are computed as offsets
+        # into the whole document, heading included). Cleaning heading+content together reproduces
+        # that same text exactly, except every heading (always starting "### ") leaves one phantom
+        # leading space when cleaned as if it were the start of a fresh string - drop it so index 0
+        # here lines up with section_start.
+        section_text = text_cleaner(heading_text + content_text)[1:]
 
         # Adjust offsets based on section start and end
-        local_start = start - section_start
+        local_start_raw = start - section_start
+        local_start = local_start_raw
         # Check local_start isn't before section end - if it is set outside chars to that variable
         if local_start < 0:
             before_chars = -1*local_start
             local_start = 0
         # Check if the end offset is greater than the section end - if it is set the after_chars and local_end is end of text
         if end > section_end:
-            local_end = -1
+            local_end = len(section_text)
             after_chars = end - section_end
-        # If not calculate the offset on the basis of difference
-        else:        
+        # If not calculate the offset on the basis of difference - using the unclipped local_start_raw
+        # so a clipped local_start (reset to 0 above) doesn't inflate local_end by before_chars
+        else:
             offset_len = end - start
-            local_end = local_start + offset_len
+            local_end = local_start_raw + offset_len
 
         # Make the cut
         cut_text = section_text[local_start:local_end]
@@ -690,15 +703,41 @@ class pairwiseChronData():
         return data
     
     # Add test function that imports passim data with text and exports sample of cut alignments and original alignment text
-    def verify_passim_offsets(self, csv_out, selection=10):
+    def verify_passim_offsets(self, csv_out, selection=30):
         """For a random set of rows process passim offsets using the internal approach and cross ref with the text 
         of the original passim"""
+        print("Creating csv to verify offsets")
         original_df = pd.read_csv(self.passim_tsv, sep="\t")
         sample = original_df.sample(selection)
 
-        # Get sample cols - 
-        sample_ms = sample["se"]
+        # Get sample ms - sample on b1 side (so local_ms matches seq1, retrieve s1)
+        ms_col = "seq1"
+        text_col = "s1"
+        id1 = sample["series_b1"].to_list()[0]
+        sample_ms = sample[ms_col].to_list()
 
+        eval_out = []
 
-        # Select the relevant passim data and output a comparison
+        # Select the relevant passim data and output a comparison - as we're filtering on ms we will get rows without a text match - to be expected
+        for year, instances in tqdm(self.chron_data.items()):
+            for book_instance, data in instances.items():
+                if id1 in book_instance:
+                    for data in data[self.passim_key]:
+                        if data["local_ms"] in sample_ms:
+                            relevant_rows = sample[sample[ms_col] == data["local_ms"]].to_dict("records")
+                            text, before, after = self.fetch_full_offset_text(year, book_instance, data["local_start_offset"], data["local_end_offset"])
+                            for row in relevant_rows:
+                                eval_out.append({
+                                    "ms": data["local_ms"],
+                                    "start": row["b1"],
+                                    "end": row["e1"],
+                                    "passim_text": row[text_col],
+                                    "offsetter_text": text,
+                                    "cut_before": before,
+                                    "cut_after": after
+                                })
+        
+        eval_df = pd.DataFrame(eval_out)
+        eval_df.to_csv(csv_out, encoding='utf-8-sig', index=False)
+
 
