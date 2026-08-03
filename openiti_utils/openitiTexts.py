@@ -542,7 +542,7 @@ class openitiTextMs():
             }
             
             # Append other values in the dict - pass through values
-            exclude_keys = ["ms", "start_offset", "end_offset"]
+            exclude_keys = ["start_offset", "end_offset"]
             for key, value in ms_offset.items():
                 if key not in exclude_keys:
                     offset_dict[key] = value

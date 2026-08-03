@@ -19,6 +19,7 @@ class pairwiseChronData():
         
 
         self.passim_key = "passim_offsets"
+        self.passim_tsv = passim_tsv
 
         # If a path to a chron_json is given - initialise object directly from that
         if chron_data is not None:
@@ -164,11 +165,11 @@ class pairwiseChronData():
         
         # data cols - the columns to use for the passim data - if selection cols is 1 then data cols 2
         if data_dir == 1:
-            data_col_dir = 2
+            self.data_col_dir = 2
         else:
-            data_col_dir = 1
-        base_cols = ["start_offset", "end_offset", "dates", "series_b"]
-        data_cols = self._create_dir_cols(base_cols, data_col_dir)
+            self.data_col_dir = 1
+        base_cols = ["start_offset", "end_offset", "dates", "series_b", "ms"]
+        data_cols = self._create_dir_cols(base_cols, self.data_col_dir)
         # Drop the numeral once selected - within a given entry's passim_offsets, "the other
         # book's data" is unambiguous from context, so the suffix would only add friction to querying
         rename_map = dict(zip(data_cols, base_cols))
@@ -176,8 +177,8 @@ class pairwiseChronData():
         # Also keep this side's own matched sub-range - the section's top-level offset/offset_end
         # covers the whole section, not the specific slice this passim alignment actually covers.
         # "local" (this book) vs the unprefixed start_offset/end_offset above (the other, "remote" book)
-        local_cols = [f"start_offset{data_dir}", f"end_offset{data_dir}"]
-        local_rename = {f"start_offset{data_dir}": "local_start_offset", f"end_offset{data_dir}": "local_end_offset"}
+        local_cols = [f"start_offset{data_dir}", f"end_offset{data_dir}", f"ms{data_dir}"]
+        local_rename = {f"start_offset{data_dir}": "local_start_offset", f"end_offset{data_dir}": "local_end_offset", f"ms{data_dir}": "local_ms"}
         select_cols = data_cols + local_cols
         full_rename = {**rename_map, **local_rename}
 
@@ -227,7 +228,7 @@ class pairwiseChronData():
 
         # Relabel data ( --> b2)
         df = pd.DataFrame(dict_data)
-        df = df.rename(columns={"start_offset": "start_offset1", "end_offset": "end_offset1"})
+        df = df.rename(columns={"start_offset": "start_offset1", "end_offset": "end_offset1", "ms": "ms1"})
         df = df.rename(columns={"seq2": "ms", "b2": "start_offset", "e2": "end_offset"})
         dict_data = df.to_dict("records")
 
@@ -236,7 +237,7 @@ class pairwiseChronData():
 
         # Relabel b1 data
         df = pd.DataFrame(dict_data)
-        df = df.rename(columns={"start_offset": "start_offset2", "end_offset": "end_offset2"})
+        df = df.rename(columns={"start_offset": "start_offset2", "end_offset": "end_offset2", "ms": "ms2"})
 
         # map dates to the offsets using the data store
         for bid in data_store.keys():
@@ -689,3 +690,15 @@ class pairwiseChronData():
         return data
     
     # Add test function that imports passim data with text and exports sample of cut alignments and original alignment text
+    def verify_passim_offsets(self, csv_out, selection=10):
+        """For a random set of rows process passim offsets using the internal approach and cross ref with the text 
+        of the original passim"""
+        original_df = pd.read_csv(self.passim_tsv, sep="\t")
+        sample = original_df.sample(selection)
+
+        # Get sample cols - 
+        sample_ms = sample["se"]
+
+
+        # Select the relevant passim data and output a comparison
+
