@@ -347,6 +347,9 @@ class pairwiseChronData():
             if self.chron_json not in temp_files:
                 print("No available temp files: b1 and b2 paths must be specified")
                 exit()
+            else:
+                print("OVERWRITE set to True but No b1_path or b2_path specified - defaulting to using temp files")
+                overwrite = False
         elif not overwrite:
             # Only need to check whether the existing temp data matches these books if we
             # haven't already determined we need to reprocess (e.g. on a first-ever run,
