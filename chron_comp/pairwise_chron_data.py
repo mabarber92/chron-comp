@@ -9,6 +9,8 @@ from openiti.helper.ara import tokenize
 
 import os
 
+class initPairwiseChronData()
+
 class pairwiseChronData():
     """Class for populating year-wise alignments between two texts as a data object
     further fields can be added to the class through update, based on processing of years"""
@@ -742,5 +744,19 @@ class pairwiseChronData():
         
         eval_df = pd.DataFrame(eval_out)
         eval_df.to_csv(csv_out, encoding='utf-8-sig', index=False)
+    
+
+    # Helper funcs shared by init on downstream processes
+    def init_b1_b2(self, chron_sort=True):
+        """set b1 and b2 - allowing for control of order of texts at comparison"""
+        books = self.chron_data.books
+        if chron_sort:
+            books.sort()
+        self.b1 = books[0]
+        self.b2 = books[1]
+
+        # initiate ids for passim data - crude - assumes id in the name
+        self.b1_id = self._create_vers_id(self.b1)
+        self.b2_id = self._create_vers_id(self.b2)
 
 

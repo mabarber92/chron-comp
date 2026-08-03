@@ -6,10 +6,11 @@ class pairwiseChronStats():
         """On initialisation if default parameters are used then the pairwiseChronData will try to load from temp
         chron_data: can be used to direct the function to a specfic chron data folder (instead of the temp)
         chron_sort: if true, set b1 to earlier book and b2 to the later of the two books (sorted by id - assuming id is a URI)"""
+        
         self.chron_data = pairwiseChronData(b1_path, b2_path, chron_data, passim_tsv)
         
         # Init base values used for comparison
-        self.init_b1_b2(chron_sort=chron_sort)
+        chron_data.init_b1_b2(chron_sort=chron_sort)
         self.len_diff_data = None
         if passim_tsv is not None:
             self.passim_dataset = True
@@ -17,17 +18,17 @@ class pairwiseChronStats():
             self.passim_dataset = False
         
 
-    def init_b1_b2(self, chron_sort=True):
-        """set b1 and b2 - allowing for control of order of texts at comparison"""
-        books = self.chron_data.books
-        if chron_sort:
-            books.sort()
-        self.b1 = books[0]
-        self.b2 = books[1]
+    # def init_b1_b2(self, chron_sort=True):
+    #     """set b1 and b2 - allowing for control of order of texts at comparison"""
+    #     books = self.chron_data.books
+    #     if chron_sort:
+    #         books.sort()
+    #     self.chron_data.b1 = books[0]
+    #     self.chron_data.b2 = books[1]
 
-        # initiate ids for passim data - crude - assumes id in the name
-        self.b1_id = self._create_vers_id(self.b1)
-        self.b2_id = self._create_vers_id(self.b2)
+    #     # initiate ids for passim data - crude - assumes id in the name
+    #     self.chron_data.b1_id = self._create_vers_id(self.chron_data.b1)
+    #     self.chron_data.b2_id = self._create_vers_id(self.chron_data.b2)
 
     def report_pipeline(self, out_dir, pipeline_stages = ["len_comp", "passim_comp", "tfidf_sim", "semantic_sim"]):
         """Run a full reporting pipeline - if data for specified pipeline stages not in the data object - then it will
@@ -96,8 +97,8 @@ class pairwiseChronStats():
         for year in years:
             text_data = self.chron_data.fetch_year_text(year, clean=clean, return_tokens=count_tokens)
             if len(text_data) > 0:
-                b1_len, b1_sect = self._select_and_measure(text_data, self.b1)
-                b2_len, b2_sect = self._select_and_measure(text_data, self.b2)
+                b1_len, b1_sect = self._select_and_measure(text_data, self.chron_data.b1)
+                b2_len, b2_sect = self._select_and_measure(text_data, self.chron_data.b2)
                 diff = b2_len - b1_len
             else:
                 b1_len = 0
@@ -108,8 +109,8 @@ class pairwiseChronStats():
 
             out_dict = {
                 "year": year,
-                "b1": self.b1,
-                "b2": self.b2,
+                "b1": self.chron_data.b1,
+                "b2": self.chron_data.b2,
                 "b1_len": b1_len,
                 "b2_len": b2_len,
                 "b1_sect": b1_sect,
@@ -243,10 +244,10 @@ class pairwiseChronStats():
 
 
     def measure_passim_alignment_b1(self, count_tokens=True):
-        return self.measure_passim_alignment(self.b1, count_tokens=count_tokens)
+        return self.measure_passim_alignment(self.chron_data.b1, count_tokens=count_tokens)
     
     def measure_passim_alignment_b2(self, count_tokens=True):
-        return self.measure_passim_alignment(self.b2, count_tokens=count_tokens)
+        return self.measure_passim_alignment(self.chron_data.b2, count_tokens=count_tokens)
 
     # How much is each year aligned - split according to alignment with same year or not
 
